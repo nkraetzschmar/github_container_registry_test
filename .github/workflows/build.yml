@@ -1,0 +1,31 @@
+on: push
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - amd64
+          - arm64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - if: matrix.arch != 'amd64'
+        run: |
+          sudo apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends qemu-user-static
+      - run: |
+          podman login -u ${{ github.actor }} -p ${{ github.token }} ghcr.io
+          podman build --arch ${{ matrix.arch }} -t ghcr.io/${{ github.repository }}/test:${{ matrix.arch }} .
+          podman push ghcr.io/${{ github.repository }}/test:${{ matrix.arch }}
+  manifest:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: |
+          podman login -u ${{ github.actor }} -p ${{ github.token }} ghcr.io
+          podman manifest create ghcr.io/${{ github.repository }}/test
+          podman manifest add ghcr.io/${{ github.repository }}/test ghcr.io/${{ github.repository }}/test:amd64
+          podman manifest add ghcr.io/${{ github.repository }}/test ghcr.io/${{ github.repository }}/test:arm64
+          podman push ghcr.io/${{ github.repository }}/test
